@@ -24,12 +24,23 @@ jobs:
         TIMEOUT_DURATION=5
         IMAGE_NAME=docker.rainbond.cc/library/mysql:5.6
 
-        # Pull the image with timeout and measure the time
-        START_TIME=$(date +%s)
-        timeout $TIMEOUT_DURATION docker pull $IMAGE_NAME 2>&1 | tee pull_output.log || echo "Docker pull timed out or failed"
-        END_TIME=$(date +%s)
+        # Start pulling the image in the background
+        (
+          docker pull $IMAGE_NAME 2>&1 &
+          echo $! > pull_pid.txt
+        ) | tee pull_output.log &
+        
+        PULL_PID=$(cat pull_pid.txt)
+
+        # Wait for the specified duration
+        sleep $TIMEOUT_DURATION
+
+        # Kill the docker pull process after the timeout
+        kill $PULL_PID
 
         # Calculate the duration
+        START_TIME=$(date +%s -r pull_output.log)
+        END_TIME=$(date +%s)
         DURATION=$((END_TIME - START_TIME))
 
         # Parse the output to find the downloaded size
