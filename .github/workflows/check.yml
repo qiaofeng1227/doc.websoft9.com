@@ -77,5 +77,11 @@ jobs:
             pull_rate=0
           fi
 
+          # Always check if the pull rate is less than 1 MB/s
+          if (( $(echo "$pull_rate < 1" | bc -l) )); then
+            echo "Pull rate is less than 1 MB/s, marking as failure"
+            exit 1
+          fi
+
           echo "--------------Final pull rate($url): $pull_rate MB/s-------------"
         done
