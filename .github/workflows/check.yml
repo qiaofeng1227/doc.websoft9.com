@@ -61,16 +61,12 @@ jobs:
             else
               pull_rate=0
             fi
-            
-            echo "Pull duration: $duration seconds"
-            echo "Pull rate: $pull_rate MB/s"
 
             # Check if the pull rate is less than 1 MB/s
             if (( $(echo "$pull_rate < 1" | bc -l) )); then
               echo "Pull rate is less than 1 MB/s, marking as failure"
-              pull_rate=0
             else
-              echo "Successfully pulled from $url at a rate of $pull_rate MB/s"
+              echo "Successfully pulled from $url"
             fi
 
             # Delete the pulled image to ensure fresh pull for the next URL
@@ -80,5 +76,5 @@ jobs:
             pull_rate=0
           fi
 
-          echo "Final pull rate: $pull_rate MB/s"
+          echo "--------------Final pull rate($url): $pull_rate MB/s--------"
         done
