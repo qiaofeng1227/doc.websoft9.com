@@ -37,14 +37,48 @@ jobs:
         urls="${{ steps.read_file.outputs.urls }}"
         IFS=' ' read -r -a url_array <<< "$urls"
 
+        # Define the size of the image in MB
+        image_size_mb=501
+
         # Try to pull the image from each URL
         for url in "${url_array[@]}"; do
           echo "Trying to pull from $url/library/mysql:5.7"
-          docker pull "$url/library/mysql:5.7" && echo "Successfully pulled from $url"
-          if [ $? -eq 0 ]; then
-            echo "Deleting the pulled image to ensure fresh pull for the next URL"
+          
+          # Get the start time
+          start_time=$(date +%s)
+          
+          # Attempt to pull the image
+          if docker pull "$url/library/mysql:5.7"; then
+            # Get the end time
+            end_time=$(date +%s)
+            
+            # Calculate the duration in seconds
+            duration=$((end_time - start_time))
+            
+            # Calculate the pull rate in MB/s
+            if [ $duration -gt 0 ]; then
+              pull_rate=$(echo "scale=2; $image_size_mb / $duration" | bc)
+            else
+              pull_rate=0
+            fi
+            
+            echo "Pull duration: $duration seconds"
+            echo "Pull rate: $pull_rate MB/s"
+
+            # Check if the pull rate is less than 1 MB/s
+            if (( $(echo "$pull_rate < 1" | bc -l) )); then
+              echo "Pull rate is less than 1 MB/s, marking as failure"
+              pull_rate=0
+            else
+              echo "Successfully pulled from $url at a rate of $pull_rate MB/s"
+            fi
+
+            # Delete the pulled image to ensure fresh pull for the next URL
             docker rmi "$url/library/mysql:5.7"
           else
             echo "Failed to pull from $url"
+            pull_rate=0
           fi
+
+          echo "Final pull rate: $pull_rate MB/s"
         done
