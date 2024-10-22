@@ -72,9 +72,9 @@ jobs:
             # Delete the pulled image to ensure fresh pull for the next URL
             docker rmi "$url/library/mysql:5.7"
           else
-            echo "Failed to pull from $url"
+            echo "--------------Failed to pull from $url--------------"
             pull_rate=0
           fi
 
-          echo "--------------Final pull rate($url): $pull_rate MB/s--------"
+          echo "--------------Final pull rate($url): $pull_rate MB/s-------------"
         done
