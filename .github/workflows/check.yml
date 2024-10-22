@@ -14,54 +14,37 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v3
 
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v2
-
-    - name: Pull Docker image with timeout and measure speed
+    - name: Read and process dockerhub-proxy.md
+      id: read_file
       run: |
-        echo "Pulling Docker image with timeout..."
-        # Set the maximum time (in seconds) for pulling the image
-        TIMEOUT_DURATION=5
-        IMAGE_NAME=docker.rainbond.cc/library/mysql:5.6
+        # Read the file and process each line
+        urls=()
+        while IFS= read -r line; do
+          # Remove '- https://' prefix and append to urls array
+          url="${line/- https:\/\//}"
+          urls+=("$url")
+        done < docs/reference/_include/dockerhub-proxy.md
 
-        # Start pulling the image in the background
-        (
-          docker pull $IMAGE_NAME 2>&1 &
-          echo $! > pull_pid.txt
-        ) | tee pull_output.log &
-        
-        PULL_PID=$(cat pull_pid.txt)
+        # Print the array for debugging
+        echo "Processed URLs: ${urls[@]}"
 
-        # Wait for the specified duration
-        sleep $TIMEOUT_DURATION
+        # Save the array to the outputs
+        echo "::set-output name=urls::${urls[*]}"
 
-        # Kill the docker pull process after the timeout
-        kill $PULL_PID
+    - name: Docker pull from proxies
+      run: |
+        # Read the URLs from the previous step
+        urls="${{ steps.read_file.outputs.urls }}"
+        IFS=' ' read -r -a url_array <<< "$urls"
 
-        # Calculate the duration
-        START_TIME=$(date +%s -r pull_output.log)
-        END_TIME=$(date +%s)
-        DURATION=$((END_TIME - START_TIME))
-
-        # Parse the output to find the downloaded size
-        DOWNLOADED_SIZE=$(grep -oP 'Downloaded \K[0-9]+(?=MB)' pull_output.log | tail -1)
-
-        # Calculate the average speed (MB/s)
-        if [ -n "$DOWNLOADED_SIZE" ] && [ "$DURATION" -gt 0 ]; then
-          AVERAGE_SPEED=$(echo "scale=2; $DOWNLOADED_SIZE / $DURATION" | bc)
-          echo "Downloaded size: $DOWNLOADED_SIZE MB"
-          echo "Duration: $DURATION seconds"
-          echo "Average speed: $AVERAGE_SPEED MB/s"
-
-          # Check if the average speed is less than 1 MB/s
-          if (( $(echo "$AVERAGE_SPEED < 1" | bc -l) )); then
-            echo "Download speed is below 1 MB/s, which is not acceptable."
+        # Try to pull the image from each URL
+        for url in "${url_array[@]}"; do
+          echo "Trying to pull from $url/library/mysql:5.7"
+          docker pull "$url/library/mysql:5.7" && echo "Successfully pulled from $url"
+          if [ $? -eq 0 ]; then
+            echo "Deleting the pulled image to ensure fresh pull for the next URL"
+            docker rmi "$url/library/mysql:5.7"
           else
-            echo "Download speed is acceptable."
+            echo "Failed to pull from $url"
           fi
-        else
-          echo "Failed to calculate the average speed."
-        fi
-
-    - name: Check Docker images
-      run: docker images
+        done
