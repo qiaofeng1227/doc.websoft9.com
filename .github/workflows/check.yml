@@ -1,30 +1,49 @@
 name: CI
 
-on:
+on: 
+  workflow_dispatch:
   push:
     branches:
       - main
-      - dev
-  pull_request:
-    branches:
-      - main
-      - dev
 
 jobs:
-  build:
+  test-docker-pull:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+    - name: Checkout repository
+      uses: actions/checkout@v3
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: '18'
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v2
 
-      - name: Install dependencies
-        run: npm install -g yarn && yarn install
+    - name: Pull Docker image with timeout and measure speed
+      run: |
+        echo "Pulling Docker image with timeout..."
+        # Set the maximum time (in seconds) for pulling the image
+        TIMEOUT_DURATION=5
+        IMAGE_NAME=docker.rainbond.cc/library/mysql:5.6
 
-      - name: Run tests
-        run: npm run start -- --host 0.0.0.0 --port 3000 --locale en
+        # Pull the image with timeout and measure the time
+        START_TIME=$(date +%s)
+        timeout $TIMEOUT_DURATION docker pull $IMAGE_NAME 2>&1 | tee pull_output.log || echo "Docker pull timed out or failed"
+        END_TIME=$(date +%s)
+
+        # Calculate the duration
+        DURATION=$((END_TIME - START_TIME))
+
+        # Parse the output to find the downloaded size
+        DOWNLOADED_SIZE=$(grep -oP 'Downloaded \K[0-9]+(?=MB)' pull_output.log | tail -1)
+
+        # Calculate the average speed (MB/s)
+        if [ -n "$DOWNLOADED_SIZE" ] && [ "$DURATION" -gt 0 ]; then
+          AVERAGE_SPEED=$(echo "scale=2; $DOWNLOADED_SIZE / $DURATION" | bc)
+          echo "Downloaded size: $DOWNLOADED_SIZE MB"
+          echo "Duration: $DURATION seconds"
+          echo "Average speed: $AVERAGE_SPEED MB/s"
+        else
+          echo "Failed to calculate the average speed."
+        fi
+
+    - name: Check Docker images
+      run: docker images
